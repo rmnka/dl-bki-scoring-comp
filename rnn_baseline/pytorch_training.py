@@ -10,7 +10,7 @@ from rnn_baseline.data_generators import batches_generator
 
 def train_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, dataset_train: List[str],
                 batch_size: int = 64, shuffle: bool = True, print_loss_every_n_batches: int = 500,
-                device: torch.device = None):
+                device: torch.device = None, run = None):
     """
     Делает одну эпоху обучения модели, логируя промежуточные значения функции потерь.
 
@@ -60,7 +60,7 @@ def train_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, datase
     print(f"Training loss after epoch: {losses.mean()}", end="\r")
 
 
-def eval_model(model: torch.nn.Module, dataset_val: List[str], batch_size: int = 32, device: torch.device = None) -> float:
+def eval_model(model: torch.nn.Module, dataset_val: List[str], batch_size: int = 32, device: torch.device = None, run = None) -> float:
     """
     Скорит выборку моделью и вычисляет метрику ROC AUC.
 
@@ -80,17 +80,22 @@ def eval_model(model: torch.nn.Module, dataset_val: List[str], batch_size: int =
     auc: float
     """
     model.eval()
+    loss_function = nn.BCEWithLogitsLoss(reduction="none")
+    losses = torch.LongTensor().to(device)
     preds = []
     targets = []
     val_generator = batches_generator(dataset_val, batch_size=batch_size, shuffle=False,
                                       device=device, is_train=True, output_format="torch")
+    with torch.no_grad():
+      for batch in tqdm_notebook(val_generator, desc="Evaluating model"):
+          targets.extend(batch["label"].detach().cpu().numpy().flatten())
+          output = model(batch["features"])
+          preds.extend(output.detach().cpu().numpy().flatten())
 
-    for batch in tqdm_notebook(val_generator, desc="Evaluating model"):
-        targets.extend(batch["label"].detach().cpu().numpy().flatten())
-        output = model(batch["features"])
-        preds.extend(output.detach().cpu().numpy().flatten())
+          batch_loss = loss_function(torch.flatten(output), batch["label"].float())
+          losses = torch.cat([losses, batch_loss], dim=0)
 
-    return roc_auc_score(targets, preds)
+    return roc_auc_score(targets, preds), losses.mean()
 
 
 def inference(model: torch.nn.Module, dataset_test: List[str], batch_size: int = 32, device: torch.device = None) -> pd.DataFrame:
