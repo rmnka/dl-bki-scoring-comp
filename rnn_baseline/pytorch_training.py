@@ -37,7 +37,7 @@ def train_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, datase
     """
     model.train()
     loss_function = nn.BCEWithLogitsLoss(reduction="none")
-    losses = torch.LongTensor().to(device)
+    losses = torch.FloatTensor().to(device)
     samples_counter = 0
     train_generator = batches_generator(dataset_train, batch_size=batch_size, shuffle=shuffle,
                                         device=device, is_train=True, output_format="torch")
@@ -53,8 +53,10 @@ def train_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, datase
 
         losses = torch.cat([losses, batch_loss], dim=0)
         if num_batch % print_loss_every_n_batches == 0:
+            tmp_loss = losses[-samples_counter:].mean()
             print(f"Batches {num_batch - print_loss_every_n_batches + 1} - {num_batch} loss:"
-                  f"{losses[-samples_counter:].mean()}", end="\r")
+                  f"{tmp_loss}", end="\r")
+            run["train_every_n_steps"].log(tmp_loss)
             samples_counter = 0
 
     print(f"Training loss after epoch: {losses.mean()}", end="\r")
@@ -81,7 +83,7 @@ def eval_model(model: torch.nn.Module, dataset_val: List[str], batch_size: int =
     """
     model.eval()
     loss_function = nn.BCEWithLogitsLoss(reduction="none")
-    losses = torch.LongTensor().to(device)
+    losses = torch.FloatTensor().to(device)
     preds = []
     targets = []
     val_generator = batches_generator(dataset_val, batch_size=batch_size, shuffle=False,
